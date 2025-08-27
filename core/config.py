@@ -1,9 +1,12 @@
 # core/config.py
-from pydantic import BaseSettings, validator, Field
 from typing import List, Optional
 import secrets
 import os
 from functools import lru_cache
+
+# Pydantic v2 migration
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -65,44 +68,52 @@ class Settings(BaseSettings):
         env="ALLOWED_ORIGINS"
     )
     
-    @validator('jwt_secret')
+    @field_validator('jwt_secret')
+    @classmethod
     def validate_jwt_secret(cls, v, values):
-        environment = values.get('environment')
+        # In pydantic v2, to access other fields use info.data or pass through values
+        environment = values.get('environment') if isinstance(values, dict) else None
         if environment == "production" and len(v) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters in production")
         return v
     
-    @validator('project_id')
+    @field_validator('project_id')
+    @classmethod
     def validate_project_id(cls, v):
         if not v or not v.strip():
             raise ValueError("PROJECT_ID is required")
         return v.strip()
     
-    @validator('max_workers')
+    @field_validator('max_workers')
+    @classmethod
     def validate_max_workers(cls, v):
         if v < 1 or v > 20:
             raise ValueError("MAX_WORKERS must be between 1 and 20")
         return v
     
-    @validator('rate_per_minute')
+    @field_validator('rate_per_minute')
+    @classmethod
     def validate_rate_limit(cls, v):
         if v < 1 or v > 1000:
             raise ValueError("RATE_PER_MINUTE must be between 1 and 1000")
         return v
     
-    @validator('cache_ttl')
+    @field_validator('cache_ttl')
+    @classmethod
     def validate_cache_ttl(cls, v):
         if v < 60 or v > 86400:  # 1 minute to 24 hours
             raise ValueError("CACHE_TTL must be between 60 and 86400 seconds")
         return v
     
-    @validator('allowed_origins', pre=True)
+    @field_validator('allowed_origins', mode='before')
+    @classmethod
     def parse_allowed_origins(cls, v):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(',')]
         return v
     
-    @validator('debug', pre=True)
+    @field_validator('debug', mode='before')
+    @classmethod
     def parse_debug(cls, v):
         if isinstance(v, str):
             return v.lower() in ('true', '1', 'on', 'yes')
@@ -130,10 +141,13 @@ class Settings(BaseSettings):
             "max_tokens": self.llm_max_tokens
         }
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    # Pydantic v2 config
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
 
 @lru_cache()
