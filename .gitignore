@@ -1,0 +1,48 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.cache/
+.coverage*
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# --- Node/JS ---
+node_modules/
+yarn.lock
+pnpm-lock.yaml
+package-lock.json
+
+# --- OS/IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Env/Secrets ---
+.env
+.env.*
+secrets/sa.json
+
+# --- Logs & DBs ---
+*.log
+logs/
+*.db
+*.sqlite3
+
+# --- Build/Dist ---
+dist/
+build/
+
+# --- Project data dirs ---
+qdrant-data/
+redis-data/

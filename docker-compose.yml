@@ -1,0 +1,142 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: esnafiz/api:latest
+    container_name: esnafiz-api
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      # Firestore creds path (compose'ta mount ettik)
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/sa.json
+      # Eğer Ollama kullanıyorsan .env'inde de var; burada override edebilirsin:
+      # OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./secrets/sa.json:/secrets/sa.json:ro
+    # Eğer reverse proxy YOKSA aşağıdaki ports'u açık bırak,
+    # reverse proxy VARSA yoruma al.
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - qdrant
+      # Meili kullanmıyorsan bunu kaldır:
+      # - meilisearch
+    healthcheck:
+      # curl her image'da olmayabilir; wget ile HEAD yapalım
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8000/healthz >/dev/null 2>&1 || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - appnet
+    # reverse proxy (Caddy/Traefik) kullanıyorsan:
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.esnafiz-api.rule=Host(`api.esnafiz.app`)"
+    #   - "traefik.http.services.esnafiz-api.loadbalancer.server.port=8000"
+
+  redis:
+    image: redis:7-alpine
+    container_name: esnafiz-redis
+    restart: always
+    command: [ "redis-server", "--appendonly", "yes" ]
+    volumes:
+      - redis-data:/data
+    networks:
+      - appnet
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: esnafiz-qdrant
+    restart: always
+    volumes:
+      - qdrant-data:/qdrant/storage
+    # Sadece iç ağda kalacaksa ports'u kaldır:
+    # ports:
+    #   - "6333:6333"
+    networks:
+      - appnet
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:6333/readyz >/dev/null 2>&1 || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # Ollama gerekiyorsa ekle (yoksa kaldır):
+  ollama:
+    image: ollama/ollama:latest
+    container_name: esnafiz-ollama
+    restart: always
+    volumes:
+      - ollama-data:/root/.ollama
+    # Gerekmedikçe dışa açma:
+    # ports:
+    #   - "11434:11434"
+    networks:
+      - appnet
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:11434/api/tags >/dev/null 2>&1 || exit 1" ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  # Meili'yi gerçekten kullanacaksan bırak, yoksa komple çıkar
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    container_name: esnafiz-meili
+    restart: always
+    environment:
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: "production"
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-local_dev_key}
+    volumes:
+      - meili-data:/meili_data
+    # Admin/testing için açabilirsin; prod'da kapalı önerilir
+    # ports:
+    #   - "7700:7700"
+    networks:
+      - appnet
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: esnafiz-prometheus
+    restart: always
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    # Prod'da güvenliksiz açma; gerekirse sadece iç ağ/VPN
+    ports:
+      - "9090:9090"
+    networks:
+      - appnet
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: esnafiz-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - appnet
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  redis-data:
+  qdrant-data:
+  meili-data:
+  prom-data:
+  grafana-data:
+  ollama-data:
